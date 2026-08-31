@@ -32,14 +32,33 @@ const userPlansRoutes = require('./routes/user_plans.routes');
 
 const app = express();
 
-const allowedOrigins = (process.env.CORS_ORIGIN || '*')
+const defaultAllowedOrigins = [
+  'http://localhost:8080',
+  'http://localhost:3000',
+  'http://localhost:4173',
+  'https://*.vercel.app',
+  'https://mozbackend.up.railway.app'
+];
+
+const allowedOrigins = (process.env.CORS_ORIGIN || defaultAllowedOrigins.join(','))
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true;
+
+  return allowedOrigins.some((pattern) => {
+    if (!pattern.includes('*')) return false;
+    const regex = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*')}$`);
+    return regex.test(origin);
+  });
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
       return;
     }
@@ -53,34 +72,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-
 app.use(helmet());
 app.use(express.json({ limit: '5mb' }));
-
-// ========== CORS MANUAL (MÁXIMA COMPATIBILIDADE) ==========
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// Compatibilidade adicional para desenvolvimento local e produção
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0] || '*');
-  }
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
 
 // Limite de pedidos para as rotas de autenticação
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
