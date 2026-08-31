@@ -32,16 +32,26 @@ const userPlansRoutes = require('./routes/user_plans.routes');
 
 const app = express();
 
-//Cors
+const allowedOrigins = (process.env.CORS_ORIGIN || '*')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const corsOptions = {
-  origin: '*', // Em produção, deves colocar aqui o domínio da Vercel: 'https://conta-facil-mz-projecto.vercel.app'
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origem não autorizada pelo CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   credentials: true
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Importante para os pedidos OPTIONS
+app.options('*', cors(corsOptions));
 
 
 app.use(helmet());
@@ -58,8 +68,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Opcional: ainda mantém o cors para compatibilidade
-app.use(cors({ origin: '*' }));
+// Compatibilidade adicional para desenvolvimento local e produção
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || allowedOrigins[0] || '*');
+  }
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Limite de pedidos para as rotas de autenticação
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
@@ -96,7 +117,7 @@ app.use('/api/user_plans', userPlansRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT || 4000);
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`ContaFácil MZ backend a correr na porta ${PORT} (${process.env.NODE_ENV || 'development'})`);
 });
