@@ -32,6 +32,9 @@ const userPlansRoutes = require('./routes/user_plans.routes');
 
 const app = express();
 
+// Proxy-aware config for Railway / reverse proxy deployments.
+app.set('trust proxy', 1);
+
 const defaultAllowedOrigins = [
   'http://localhost:8080',
   'http://localhost:3000',
@@ -80,7 +83,13 @@ app.use(helmet());
 app.use(express.json({ limit: '5mb' }));
 
 // Limite de pedidos para as rotas de autenticação
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: 1
+});
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
