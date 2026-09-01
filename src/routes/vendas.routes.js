@@ -277,7 +277,13 @@ router.post('/', async (req, res, next) => {
       const deveAtualizarSaldo = fazerDivida || (saldoAtual < 0 && saldoUsado > 0);
 
       if (deveAtualizarSaldo) {
-        const novoSaldo = saldoAtual + Number(total) - saldoUsado;
+        let novoSaldo = saldoAtual;
+
+        if (fazerDivida) {
+          novoSaldo = saldoAtual + Number(total);
+        } else if (saldoAtual < 0 && saldoUsado > 0) {
+          novoSaldo = saldoAtual + saldoUsado;
+        }
 
         await supabaseAdmin
           .from('clientes')
