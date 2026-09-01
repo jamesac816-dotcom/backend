@@ -1,21 +1,85 @@
 const express = require('express');
-const { pool } = require('../db');
+const { supabaseAdmin } = require('../supabaseClient');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
 
+const CATEGORIAS_PADRAO = [
+  ['Vendas', 'receita', '#10B981'],
+  ['Serviços', 'receita', '#34D399'],
+  ['Recebimento de Cliente', 'receita', '#3B82F6'],
+  ['Outras Receitas', 'receita', '#2563EB'],
+  ['Fornecedores', 'despesa', '#2563EB'],
+  ['Renda/Aluguer', 'despesa', '#3B82F6'],
+  ['Salários', 'despesa', '#10B981'],
+  ['Transporte', 'despesa', '#34D399'],
+  ['Energia/Água', 'despesa', '#C98A1A'],
+  ['Outras Despesas', 'despesa', '#8598AB'],
+];
+
+async function garantirCategoriasPadrao(empresaId, tipoFiltrado = null) {
+  if (!supabaseAdmin) return;
+
+  const tiposParaGarantir = tipoFiltrado ? [tipoFiltrado] : ['receita', 'despesa'];
+
+  for (const tipo of tiposParaGarantir) {
+    const { data: existentes = [], error: selectError } = await supabaseAdmin
+      .from('categorias_financeiras')
+      .select('id, nome, tipo')
+      .eq('empresa_id', empresaId)
+      .eq('tipo', tipo);
+
+    if (selectError) throw selectError;
+    const nomesExistentes = new Set((existentes || []).map((categoria) => categoria.nome));
+    const faltantes = CATEGORIAS_PADRAO.filter(([nome, categoriaTipo]) => categoriaTipo === tipo && !nomesExistentes.has(nome));
+
+    if (!faltantes.length) continue;
+
+    const rows = faltantes.map(([nome, categoriaTipo, cor]) => ({
+      empresa_id: empresaId,
+      nome,
+      tipo: categoriaTipo,
+      cor,
+      ativo: true,
+    }));
+
+    const { error: insertError } = await supabaseAdmin.from('categorias_financeiras').insert(rows);
+    if (insertError) throw insertError;
+  }
+}
+
 // GET /api/categorias?tipo=receita|despesa — só as activas, a não ser que incluirInativas=1
 router.get('/', async (req, res, next) => {
   const { tipo, incluirInativas } = req.query;
   try {
-    const params = [req.user.empresaId];
-    let sql = `SELECT * FROM categorias_financeiras WHERE empresa_id = $1`;
-    if (tipo) { params.push(tipo); sql += ` AND tipo = $${params.length}`; }
-    if (!incluirInativas) sql += ` AND ativo = true`;
-    sql += ` ORDER BY tipo, nome ASC`;
-    const result = await pool.query(sql, params);
-    res.json(result.rows);
+    if (!supabaseAdmin) return res.status(503).json({ erro: 'Supabase não configurado.' });
+
+    let query = supabaseAdmin
+      .from('categorias_financeiras')
+      .select('*')
+      .eq('empresa_id', req.user.empresaId);
+
+    if (tipo) query = query.eq('tipo', tipo);
+    if (!incluirInativas) query = query.eq('ativo', true);
+
+    const { data, error } = await query.order('tipo', { ascending: true }).order('nome', { ascending: true });
+    if (error) throw error;
+
+    const rows = data || [];
+    if (!rows.length) {
+      await garantirCategoriasPadrao(req.user.empresaId, tipo || null);
+      const { data: refill, error: refillError } = await supabaseAdmin
+        .from('categorias_financeiras')
+        .select('*')
+        .eq('empresa_id', req.user.empresaId)
+        .order('tipo', { ascending: true })
+        .order('nome', { ascending: true });
+      if (refillError) throw refillError;
+      return res.json(refill || []);
+    }
+
+    res.json(rows);
   } catch (err) { next(err); }
 });
 
@@ -25,47 +89,94 @@ router.post('/', async (req, res, next) => {
     return res.status(400).json({ erro: 'Nome e tipo (receita/despesa) são obrigatórios.' });
   }
   try {
-    const result = await pool.query(
-      `INSERT INTO categorias_financeiras (empresa_id, nome, tipo, cor) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.user.empresaId, nome.trim(), tipo, cor || '#8598AB']
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ erro: 'Já existe uma categoria com esse nome para esse tipo.' });
-    next(err);
-  }
+    if (!supabaseAdmin) return res.status(503).json({ erro: 'Supabase não configurado.' });
+
+    const { data, error } = await supabaseAdmin
+      .from('categorias_financeiras')
+      .insert({
+        empresa_id: req.user.empresaId,
+        nome: String(nome).trim(),
+        tipo,
+        cor: cor || '#8598AB',
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(409).json({ erro: 'Já existe uma categoria com esse nome para esse tipo.' });
+      }
+      throw error;
+    }
+
+    res.status(201).json(data);
+  } catch (err) { next(err); }
 });
 
 router.put('/:id', async (req, res, next) => {
   const { nome, cor, ativo } = req.body;
   try {
-    const result = await pool.query(
-      `UPDATE categorias_financeiras SET nome=COALESCE($1,nome), cor=COALESCE($2,cor), ativo=COALESCE($3,ativo)
-       WHERE id=$4 AND empresa_id=$5 RETURNING *`,
-      [nome, cor, ativo, req.params.id, req.user.empresaId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ erro: 'Categoria não encontrada.' });
-    res.json(result.rows[0]);
+    if (!supabaseAdmin) return res.status(503).json({ erro: 'Supabase não configurado.' });
+
+    const updatePayload = {};
+    if (nome !== undefined) updatePayload.nome = String(nome).trim();
+    if (cor !== undefined) updatePayload.cor = cor;
+    if (ativo !== undefined) updatePayload.ativo = !!ativo;
+
+    const { data, error } = await supabaseAdmin
+      .from('categorias_financeiras')
+      .update(updatePayload)
+      .eq('id', req.params.id)
+      .eq('empresa_id', req.user.empresaId)
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.message?.includes('No rows')) {
+        return res.status(404).json({ erro: 'Categoria não encontrada.' });
+      }
+      throw error;
+    }
+
+    res.json(data);
   } catch (err) { next(err); }
 });
 
 // DELETE só é permitido se a categoria nunca foi usada em nenhuma transação
-// (senão, sugerimos desactivar em vez de apagar, para não perder o histórico)
+// (senão, sugerimos desactivar em vez de a remover, para não perder o histórico)
 router.delete('/:id', async (req, res, next) => {
   try {
-    const usoResult = await pool.query(
-      `SELECT COUNT(*) FROM transacoes t JOIN categorias_financeiras c ON c.nome = t.categoria AND c.tipo = t.tipo
-       WHERE c.id = $1 AND t.empresa_id = $2`,
-      [req.params.id, req.user.empresaId]
-    );
-    if (Number(usoResult.rows[0].count) > 0) {
+    if (!supabaseAdmin) return res.status(503).json({ erro: 'Supabase não configurado.' });
+
+    const { data: categoria, error: categoriaError } = await supabaseAdmin
+      .from('categorias_financeiras')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('empresa_id', req.user.empresaId)
+      .maybeSingle();
+
+    if (categoriaError) throw categoriaError;
+    if (!categoria) return res.status(404).json({ erro: 'Categoria não encontrada.' });
+
+    const { count, error: usoError } = await supabaseAdmin
+      .from('transacoes')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', req.user.empresaId)
+      .eq('categoria', categoria.nome)
+      .eq('tipo', categoria.tipo);
+
+    if (usoError) throw usoError;
+    if ((count || 0) > 0) {
       return res.status(409).json({ erro: 'Esta categoria já foi usada em lançamentos. Desactive-a em vez de a remover.' });
     }
-    const result = await pool.query(
-      `DELETE FROM categorias_financeiras WHERE id=$1 AND empresa_id=$2 RETURNING id`,
-      [req.params.id, req.user.empresaId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ erro: 'Categoria não encontrada.' });
+
+    const { error } = await supabaseAdmin
+      .from('categorias_financeiras')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('empresa_id', req.user.empresaId);
+
+    if (error) throw error;
     res.status(204).send();
   } catch (err) { next(err); }
 });

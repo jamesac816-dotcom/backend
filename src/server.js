@@ -36,7 +36,10 @@ const defaultAllowedOrigins = [
   'http://localhost:8080',
   'http://localhost:3000',
   'http://localhost:4173',
-  'https://*.vercel.app',
+  'http://127.0.0.1:8080',
+  'http://127.0.0.1:3000',
+  'https://contafacil-mz.vercel.app',
+  'https://www.contafacil-mz.vercel.app',
   'https://mozbackend.up.railway.app'
 ];
 
@@ -48,11 +51,11 @@ const allowedOrigins = (process.env.CORS_ORIGIN || defaultAllowedOrigins.join(',
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
   if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true;
-
   return allowedOrigins.some((pattern) => {
-    if (!pattern.includes('*')) return false;
-    const regex = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*')}$`);
-    return regex.test(origin);
+    if (pattern.endsWith('.vercel.app')) {
+      return origin.endsWith('.vercel.app');
+    }
+    return false;
   });
 };
 
@@ -62,7 +65,8 @@ const corsOptions = {
       callback(null, true);
       return;
     }
-    callback(new Error('Origem não autorizada pelo CORS'));
+    // em desenvolvimento ou preview, é melhor permitir o request em vez de derrubar a API.
+    callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],

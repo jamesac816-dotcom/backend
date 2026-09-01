@@ -120,6 +120,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   const { clienteId, formaPagamento, itens } = req.body;
   const appliedBalance = Number(req.body.appliedBalance || 0);
+  const fazerDivida = Boolean(req.body.fazerDivida);
 
   console.log('[vendas] Recebido POST /vendas — empresa:', req.user.empresaId);
   console.log('[vendas] Payload:', JSON.stringify(req.body));
@@ -273,13 +274,17 @@ router.post('/', async (req, res, next) => {
 
       const saldoAtual = Number(clienteData?.saldo_devedor || 0);
       const saldoUsado = Math.min(Math.max(Number(appliedBalance || 0), 0), Number(total || 0));
-      const novoSaldo = saldoAtual + Number(total) - saldoUsado;
+      const deveAtualizarSaldo = fazerDivida || (saldoAtual < 0 && saldoUsado > 0);
 
-      await supabaseAdmin
-        .from('clientes')
-        .update({ saldo_devedor: novoSaldo })
-        .eq('id', clienteId)
-        .eq('empresa_id', req.user.empresaId);
+      if (deveAtualizarSaldo) {
+        const novoSaldo = saldoAtual + Number(total) - saldoUsado;
+
+        await supabaseAdmin
+          .from('clientes')
+          .update({ saldo_devedor: novoSaldo })
+          .eq('id', clienteId)
+          .eq('empresa_id', req.user.empresaId);
+      }
     }
 
     return res.status(201).json({ ...vendaRow, itens: itensProcessados });
