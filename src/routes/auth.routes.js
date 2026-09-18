@@ -225,7 +225,7 @@ router.post('/register', async (req, res, next) => {
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   const { email, senha } = req.body;
-  if (!email || !senha) {
+  if (typeof email!=='string' || typeof senha!=='string' || !email.trim() || !senha) {
     return res.status(400).json({ erro: 'E-mail e senha são obrigatórios.' });
   }
 
@@ -246,6 +246,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ erro: 'E-mail ou senha inválidos.' });
     }
 
+    if(typeof usuario.senha_hash!=='string' || !usuario.senha_hash) return res.status(401).json({erro:'Não foi possível validar esta conta. Contacte o administrador.'});
     const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
     if (!senhaValida) {
       return res.status(401).json({ erro: 'E-mail ou senha inválidos.' });

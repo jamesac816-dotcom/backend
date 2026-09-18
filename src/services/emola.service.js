@@ -36,6 +36,7 @@ async function iniciarPagamentoC2B({ telefone, valor, referenciaTransacao }) {
   // AJUSTAR: nomes dos campos e cabeçalhos conforme a documentação que a
   // Movitel fornecer para a sua conta comercial.
   const res = await fetch(API_URL, {
+    signal: AbortSignal.timeout(60000),
     method: 'POST',
     headers: {
       Authorization: `Bearer ${API_KEY}`,

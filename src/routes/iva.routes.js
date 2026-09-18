@@ -19,11 +19,6 @@ router.get('/', async (req, res, next) => {
   try {
     let query = supabaseAdmin.from('iva_lancamentos').select('*').eq('empresa_id', req.user.empresaId).order('data', { ascending: false });
 
-    if (periodo === 'ano') {
-      const ano = new Date().getFullYear();
-      query = query.eq('data', undefined); // placeholder — we'll filter client-side
-    }
-
     const { data: lancamentos = [], error } = await query;
     if (error) return next(error);
 

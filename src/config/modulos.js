@@ -1,5 +1,5 @@
-// Lista de módulos do ContaFácil MZ ERP e quais ficam activos por omissão,
-// consoante o tipo de negócio escolhido no onboarding.
+// Lista de módulos do ContaFácil MZ ERP. Novas contas começam com todos
+// os módulos, sujeitos ao plano existente; a actividade só personaliza a UI.
 //
 // Módulos "core" (dashboard, perfil, configuracoes, notificações) não estão
 // nesta lista porque estão sempre activos e não podem ser desligados.
@@ -58,7 +58,9 @@ const MODULOS_POR_TIPO_NEGOCIO = {
 };
 
 function modulosPorOmissao(tipoNegocio) {
-  return MODULOS_POR_TIPO_NEGOCIO[tipoNegocio] || PADRAO_GERAL;
+  // A actividade personaliza a apresentação, não o acesso a funcionalidades.
+  // Esta função só é usada na criação; módulos de contas existentes são preservados.
+  return [...TODOS_OS_MODULOS];
 }
 
 module.exports = { TODOS_OS_MODULOS, MODULOS_POR_TIPO_NEGOCIO, modulosPorOmissao };

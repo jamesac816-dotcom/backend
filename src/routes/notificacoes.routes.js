@@ -11,10 +11,11 @@ router.get('/', async (req, res, next) => {
 
     const { data: produtos = [] } = await supabaseAdmin
       .from('produtos')
-      .select('id, nome, qtd_por_caixa, qtd_estoque_unidades, qtd_minima_caixas')
+      .select('id, nome, tipo_item, status, unidade_medida, qtd_por_caixa, qtd_estoque_unidades, qtd_minima_caixas')
       .eq('empresa_id', req.user.empresaId);
 
     const estoqueBaixo = (produtos || []).filter((p) => {
+      if (p.tipo_item === 'servico' || String(p.status).toLowerCase() === 'inativo') return false;
       const caixas = Number(p.qtd_estoque_unidades || 0) / Math.max(Number(p.qtd_por_caixa || 1), 1);
       return caixas <= Number(p.qtd_minima_caixas || 0);
     });
@@ -36,7 +37,7 @@ router.get('/', async (req, res, next) => {
       ...estoqueBaixo.map((p) => ({
         tipo: 'estoque_baixo',
         titulo: `Estoque baixo: ${p.nome}`,
-        mensagem: `Restam ${Math.floor(Number(p.qtd_estoque_unidades || 0) / Math.max(Number(p.qtd_por_caixa || 1), 1))} caixa(s).`,
+        mensagem: `Restam ${Number(p.qtd_estoque_unidades || 0)} ${p.unidade_medida || 'un'}.`,
       })),
       ...clientes.map((c) => ({
         tipo: 'cliente_devedor',

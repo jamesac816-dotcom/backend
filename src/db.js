@@ -10,7 +10,7 @@ let pool = null;
 let hasDb = false;
 
 function emptyQueryResult() {
-  return { rows: [], rowCount: 0, command: 'SELECT' };
+  throw Object.assign(new Error('Este módulo requer DATABASE_URL configurada no servidor. Nenhuma operação foi gravada.'), {status:503});
 }
 
 function createNoDbClient() {

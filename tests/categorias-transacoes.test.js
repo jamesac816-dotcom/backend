@@ -46,23 +46,16 @@ test('GET /api/categorias usa Supabase e devolve categorias da empresa', async (
         fromCalled = true;
         assert.equal(table, 'categorias_financeiras');
 
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      order() {
-                        return Promise.resolve({ data: [{ id: 'c1', nome: 'Vendas', tipo: 'receita', ativo: true }], error: null });
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
+        // Query Supabase encadeável: a rota usa três filtros e duas ordenações.
+        const query = {
+          select() { return this; },
+          eq() { return this; },
+          order() { return this; },
+          then(resolve, reject) {
+            return Promise.resolve({ data: [{ id: 'c1', nome: 'Vendas', tipo: 'receita', ativo: true }], error: null }).then(resolve, reject);
+          }
         };
+        return query;
       },
     },
   };
@@ -90,7 +83,7 @@ test('GET /api/categorias usa Supabase e devolve categorias da empresa', async (
     },
   };
 
-  await handler(req, res, () => {});
+  await handler(req, res, err => { throw err; });
 
   assert.equal(fromCalled, true);
   assert.equal(Array.isArray(res.body), true);

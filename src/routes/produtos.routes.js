@@ -4,6 +4,17 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
+function validarProduto(p) {
+  if (p.tipoItem != null && !['produto','servico'].includes(p.tipoItem)) return 'Tipo de artigo inválido.';
+  if (p.unidadeMedida != null && !['un','kg','g','l','ml','m','m2','hora','servico'].includes(p.unidadeMedida)) return 'Unidade de medida inválida.';
+  for (const campo of ['precoCompra','precoVendaUnidade','precoVendaCaixa','qtdEstoqueUnidades','qtdMinimaCaixas']) {
+    if (p[campo] != null && (!Number.isFinite(Number(p[campo])) || Number(p[campo])<0)) return 'Preços e quantidades devem ser números não negativos.';
+  }
+  if (p.qtdPorCaixa != null && (!Number.isInteger(Number(p.qtdPorCaixa)) || Number(p.qtdPorCaixa)<1)) return 'Quantidade por embalagem deve ser um inteiro positivo.';
+  if ((p.unidadeMedida || 'un')==='un' && p.qtdEstoqueUnidades != null && !Number.isInteger(Number(p.qtdEstoqueUnidades))) return 'Artigos por unidade exigem stock inteiro.';
+  if (p.tipoItem==='servico' && Number(p.qtdEstoqueUnidades || 0)!==0) return 'Serviços não têm stock.';
+  return null;
+}
 
 router.get('/', async (req, res, next) => {
   const { busca } = req.query;
@@ -51,6 +62,8 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   const p = req.body;
+  const invalido = validarProduto(p);
+  if(invalido) return res.status(400).json({erro:invalido});
   if (!p.nome || p.precoVendaUnidade == null || !p.qtdPorCaixa) {
     return res.status(400).json({ erro: 'Nome, preço de venda por unidade e quantidade por caixa são obrigatórios.' });
   }
@@ -61,6 +74,8 @@ router.post('/', async (req, res, next) => {
       .from('produtos')
       .insert({
         empresa_id: req.user.empresaId,
+        tipo_item: p.tipoItem || 'produto',
+        unidade_medida: p.unidadeMedida || 'un',
         nome: p.nome,
         categoria: p.categoria || null,
         marca: p.marca || null,
@@ -89,10 +104,18 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   const p = req.body;
+  const invalido = validarProduto(p);
+  if(invalido) return res.status(400).json({erro:invalido});
   try {
     if (!supabaseAdmin) return res.status(503).json({ erro: 'Supabase não configurado.' });
 
+    const {data:actual,error:erroActual} = await supabaseAdmin.from('produtos').select('*').eq('id',req.params.id).eq('empresa_id',req.user.empresaId).maybeSingle();
+    if(erroActual) throw erroActual;
+    if(!actual) return res.status(404).json({erro:'Produto não encontrado.'});
+    if(Number(actual.qtd_estoque_unidades)>0 && ((p.tipoItem && p.tipoItem!==actual.tipo_item) || (p.unidadeMedida && p.unidadeMedida!==actual.unidade_medida))) return res.status(400).json({erro:'Esgote ou ajuste o stock antes de alterar o tipo ou a unidade de medida.'});
     const payload = {
+      tipo_item: p.tipoItem,
+      unidade_medida: p.unidadeMedida,
       nome: p.nome,
       categoria: p.categoria ?? null,
       marca: p.marca ?? null,

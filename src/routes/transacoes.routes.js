@@ -11,27 +11,7 @@ function dataParaDate(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function emPeriodo(dataValue, periodo = 'mes') {
-  const data = dataParaDate(dataValue);
-  if (!data) return false;
-  const agora = new Date();
-
-  switch (periodo) {
-    case 'hoje':
-      return data.toDateString() === agora.toDateString();
-    case 'semana': {
-      const inicioSemana = new Date(agora);
-      inicioSemana.setDate(agora.getDate() - agora.getDay());
-      inicioSemana.setHours(0, 0, 0, 0);
-      return data >= inicioSemana;
-    }
-    case 'ano':
-      return data.getFullYear() === agora.getFullYear();
-    case 'mes':
-    default:
-      return data.getMonth() === agora.getMonth() && data.getFullYear() === agora.getFullYear();
-  }
-}
+const {emPeriodo} = require('../services/resumo.service');
 
 router.get('/', async (req, res, next) => {
   const { tipo, periodo, contaBancariaId, naoConciliadas } = req.query;

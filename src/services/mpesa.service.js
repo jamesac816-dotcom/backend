@@ -51,6 +51,7 @@ function cifrarApplicationKey() {
 async function obterSessionKey() {
   const applicationKeyCifrada = cifrarApplicationKey();
   const res = await fetch(`https://${API_HOST}${CAMINHO_SESSION}`, {
+    signal: AbortSignal.timeout(30000),
     method: 'GET',
     headers: {
       Authorization: `Bearer ${applicationKeyCifrada}`,
@@ -83,6 +84,7 @@ async function iniciarPagamentoC2B({ telefone, valor, referenciaTransacao, refer
 
   const sessionKey = await obterSessionKey();
   const res = await fetch(`https://${API_HOST}${CAMINHO_C2B}`, {
+    signal: AbortSignal.timeout(60000),
     method: 'POST',
     headers: {
       Authorization: `Bearer ${sessionKey}`,
