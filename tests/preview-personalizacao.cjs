@@ -5,9 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const bootstrap = `<script>
-state.user = {businessType: new URLSearchParams(location.search).get('tipo') || 'Farmácia', ownerName:'Demonstração', businessName:'Negócio de teste', modulosAtivos:Object.keys(MODULOS)};
+state.user = {businessType: new URLSearchParams(location.search).get('tipo') || 'Farmácia', ownerName:'Demonstração', businessName:'Negócio de teste', papel:'admin', inscritoEm:'2026-09-01T10:00:00Z', planoAtual:{id:'essencial',nome:'Essencial',preco:12900,renovarEm:'2026-10-01T10:00:00Z'}, modulosAtivos:Object.keys(MODULOS)};
 apiFetch = async () => { throw new Error('Pré-visualização: API desactivada'); };
 showScreen('app');
+renderResumoAssinatura();
 renderPersonalizacaoDashboard();
 renderSugestoesProdutos();
 if (new URLSearchParams(location.search).get('vista') === 'produto') openProdutoModal();
@@ -27,7 +28,10 @@ http.createServer((req, res) => {
     res.writeHead(404); return res.end();
   }
   try {
-    const file = fs.readFileSync(path.join(root, pathname.slice(1)));
+    let file = fs.readFileSync(path.join(root, pathname.slice(1)));
+    if (pathname === '/auth.js') {
+      file = file.toString().replace(/if\(document.readyState === 'loading'\)\{[\s\S]*?async function enterApp/, 'async function enterApp');
+    }
     res.setHeader('Content-Type', pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'image/jpeg');
     res.end(file);
   } catch { res.writeHead(404); res.end(); }

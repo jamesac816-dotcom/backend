@@ -21,6 +21,7 @@ function formatarUsuarioEmpresa(usuario, empresa, planoAtual = null) {
     nome: usuario.nome,
     email: usuario.email,
     telefone: usuario.telefone,
+    inscritoEm: usuario.criado_em || null,
     papel: usuario.papel,
     planoAtual: planoAtual || {
       id: 'essencial',
@@ -97,6 +98,8 @@ async function buscarPlanoAtual(empresaId) {
 
     if (planoError || !plano) {
       return {
+        inicioEm: userPlan.start_date,
+        renovarEm: userPlan.expires_at,
         id: userPlan.plano_id || 'essencial',
         nome: plano?.nome || userPlan.plano_id || 'Essencial',
         descricao: 'Plano associado à empresa',
@@ -108,6 +111,8 @@ async function buscarPlanoAtual(empresaId) {
 
     return {
       id: plano.id,
+      inicioEm: userPlan.start_date,
+      renovarEm: userPlan.expires_at,
       nome: plano.nome,
       descricao: plano.descricao,
       preco: Number(plano.preco || 0),
@@ -130,7 +135,11 @@ async function buscarPlanoAtual(empresaId) {
 // POST /api/auth/register
 // Cria a empresa (negócio) e o utilizador administrador numa única transação.
 router.post('/register', async (req, res, next) => {
-  const { nome, email, telefone, senha, nomeNegocio, tipoNegocio, cidade, endereco } = req.body;
+  const { nome, email, senha, nomeNegocio, tipoNegocio, cidade, endereco } = req.body;
+  const telefone = typeof req.body.telefone === 'string' ? req.body.telefone.replace(/[\s()-]/g, '') : '';
+  if (!/^(?:\+?258)?\d{9}$/.test(telefone)) {
+    return res.status(400).json({ erro: 'Indique um telefone válido: 9 dígitos, com ou sem +258.' });
+  }
 
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: 'Nome, e-mail e senha são obrigatórios.' });
